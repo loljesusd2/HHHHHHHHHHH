@@ -1,0 +1,1462 @@
+
+generator client {
+    provider = "prisma-client-js"
+    binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
+    output = "/home/ubuntu/beauty-go-mvp/node_modules/.prisma/client"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  phone     String?
+  avatar    String?
+  role      UserRole @default(CLIENT)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Verification system
+  verificationStatus VerificationStatus @default(UNVERIFIED)
+  verificationDocuments String[] // Array of document URLs
+  verificationNotes String?
+  verifiedAt DateTime?
+
+  // Client specific fields
+  clientProfile ClientProfile?
+
+  // Professional specific fields
+  professionalProfile ProfessionalProfile?
+
+  // Relations
+  bookingsAsClient      Booking[] @relation("ClientBookings")
+  bookingsAsProfessional Booking[] @relation("ProfessionalBookings")
+  reviewsGiven          Review[]  @relation("ReviewsGiven")
+  reviewsReceived       Review[]  @relation("ReviewsReceived")
+  payments              Payment[]
+  notifications         Notification[]
+  verificationRequests  VerificationRequest[]
+  favorites             Favorite[]
+  favoritedBy           Favorite[] @relation("FavoriteProfessionals")
+  styleAnalyses         StyleAnalysis[]
+  clientStyleMatches    StyleMatchHistory[] @relation("ClientStyleMatches")
+  professionalStyleMatches StyleMatchHistory[] @relation("ProfessionalStyleMatches")
+
+  // Gamification relations
+  beautyPoints          BeautyPoints[]
+  userBadges            UserBadge[]
+  referralsGiven        Referral[] @relation("UserReferrals")
+  referralsReceived     Referral[] @relation("UserReferred")
+  beautyTimeline        BeautyTimeline[]
+
+  // Beauty Academy relations
+  instructorProfile     InstructorProfile?
+  courseEnrollments     CourseEnrollment[]
+  courseProgress        CourseProgress[]
+  quizResults           QuizResult[]
+  academyCertifications AcademyCertification[]
+  courseReviews         CourseReview[]
+  instructorCourses     Course[] @relation("InstructorCourses")
+
+  // Salon relations
+  ownedSalons           Salon[] @relation("SalonOwner")
+  salonMemberships      SalonProfessional[]
+
+  // Admin relations
+  adminMessages         AdminMessage[] @relation("UserMessages")
+  userBans              UserBan[] @relation("UserBans")
+  adminBans             UserBan[] @relation("AdminBans")
+  contentManagement     ContentManagement[] @relation("AdminContent")
+  adminLogs             AdminLog[] @relation("AdminActions")
+  userRewards           UserReward[] @relation("UserRewards")
+
+  // Live Service Tracking relations
+  professionalTracking  ServiceTracking[] @relation("ProfessionalTracking")
+  clientTracking        ServiceTracking[] @relation("ClientTracking")
+  professionalSurgeSettings ProfessionalSurgeSettings? @relation("ProfessionalSurgeSettings")
+  clientRecurringBookings RecurringBookingPrice[] @relation("ClientRecurringBookings")
+  emergencyContacts     EmergencyContact[] @relation("UserEmergencyContacts")
+
+  @@map("users")
+}
+
+model ClientProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  address    String?
+  city       String?
+  state      String?
+  zipCode    String?
+  
+  preferences String[] // Array of preferred service types
+
+  @@map("client_profiles")
+}
+
+model ProfessionalProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  businessName String
+  bio          String?
+  address      String
+  city         String
+  state        String
+  zipCode      String
+  
+  mobileProfessional Boolean @default(true) // Offers mobile services
+  hasStudio Boolean @default(false) // Has a physical studio
+  
+  // Business details
+  yearsExperience Int?
+  certifications  String[]
+  portfolio       String[] // Array of image URLs
+  
+  // Style matching features
+  styleSpecialties String[] // Array of style specialties like "balayage", "smoky eyes"
+  styleExpertise Json? // { "hair_color": 95, "makeup": 88, "styling": 92 } - expertise scores
+  
+  // Availability
+  workingHours Json // { monday: { start: "09:00", end: "17:00", available: true }, ... }
+  
+  // Stats
+  totalEarnings   Float   @default(0)
+  averageRating   Float   @default(0)
+  totalReviews    Int     @default(0)
+  isVerified      Boolean @default(false)
+  isActive        Boolean @default(true)
+
+  // Relations
+  services Service[]
+  stylePortfolio StylePortfolio[]
+  
+  // Analytics relations
+  earningsPredictions EarningsPrediction[]
+  scheduleOptimizations ScheduleOptimization[]
+  clientRetentionAnalyses ClientRetentionAnalysis[]
+  businessInsights BusinessInsight[]
+  competitiveAnalyses CompetitiveAnalysis[]
+
+  // Salon relations
+  salonMemberships SalonProfessional[]
+
+  @@map("professional_profiles")
+}
+
+model Service {
+  id             String @id @default(cuid())
+  professionalId String
+  professional   ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String
+  category    ServiceCategory
+  price       Float
+  duration    Int // in minutes
+  images      String[] // Array of image URLs
+  isActive    Boolean @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  bookings Booking[]
+  flashDeals FlashDeal[]
+  dynamicPricing DynamicPricing[]
+  recurringBookingPrices RecurringBookingPrice[]
+
+  @@map("services")
+}
+
+model Booking {
+  id             String @id @default(cuid())
+  clientId       String
+  professionalId String
+  serviceId      String
+  
+  client       User    @relation("ClientBookings", fields: [clientId], references: [id])
+  professional User    @relation("ProfessionalBookings", fields: [professionalId], references: [id])
+  service      Service @relation(fields: [serviceId], references: [id])
+
+  // Booking details
+  scheduledDate DateTime
+  scheduledTime String // "14:30"
+  status        BookingStatus @default(PENDING)
+  totalAmount   Float
+  notes         String?
+  
+  // Style matching features
+  styleGuarantee Boolean @default(false)
+  styleAnalysisId String?
+  styleAnalysis StyleAnalysis? @relation(fields: [styleAnalysisId], references: [id])
+  styleMatchScore Float?
+  
+  // Location (manual address input)
+  address   String
+  city      String
+  state     String
+  zipCode   String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  payment Payment?
+  review  Review?
+  beautyTimeline BeautyTimeline[]
+  serviceTracking ServiceTracking?
+
+  @@map("bookings")
+}
+
+model Payment {
+  id        String @id @default(cuid())
+  bookingId String @unique
+  userId    String
+  
+  user    User    @relation(fields: [userId], references: [id])
+  booking Booking @relation(fields: [bookingId], references: [id])
+
+  amount            Float
+  platformFee       Float // 20% commission
+  professionalAmount Float
+  paymentMethod     PaymentMethod @default(CASH)
+  status            PaymentStatus @default(PENDING)
+  
+  transactionId String @unique @default(cuid())
+
+  // Refund information
+  refundAmount Float?
+  refundReason String?
+  refundedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("payments")
+}
+
+
+
+model Review {
+  id        String @id @default(cuid())
+  bookingId String @unique
+  reviewerId String
+  revieweeId String
+  
+  booking  Booking @relation(fields: [bookingId], references: [id])
+  reviewer User    @relation("ReviewsGiven", fields: [reviewerId], references: [id])
+  reviewee User    @relation("ReviewsReceived", fields: [revieweeId], references: [id])
+
+  rating    Int // 1-5 stars
+  comment   String?
+  images    String[] // Optional photos
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("reviews")
+}
+
+model Notification {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title   String
+  message String
+  type    NotificationType
+  isRead  Boolean @default(false)
+  data    Json? // Additional data for the notification
+
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
+
+model VerificationRequest {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  documentType    String // "id", "license", "certification"
+  documentUrl     String
+  documentName    String
+  status          VerificationStatus @default(PENDING)
+  adminNotes      String?
+  reviewedBy      String? // Admin user ID
+  reviewedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("verification_requests")
+}
+
+
+
+model Favorite {
+  id             String @id @default(cuid())
+  userId         String
+  professionalId String
+  
+  user         User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  professional User @relation("FavoriteProfessionals", fields: [professionalId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  
+  @@unique([userId, professionalId])
+  @@map("favorites")
+}
+
+model StyleAnalysis {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Original image analysis
+  originalImageUrl String
+  analysisResults Json // AI analysis results
+  
+  // Detected style tags
+  styleTags String[] // ["balayage", "blonde", "waves", "natural"]
+  colorTags String[] // ["blonde", "highlights", "cool_tones"]
+  techniqueTags String[] // ["layers", "face_framing", "texture"]
+  difficultyLevel StyleDifficulty @default(MEDIUM)
+  estimatedDuration Int? // in minutes
+  
+  // Matching results
+  topMatches Json? // Array of professional IDs with scores
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  bookings Booking[]
+  styleMatches StyleMatchHistory[]
+  
+  @@map("style_analysis")
+}
+
+model StylePortfolio {
+  id String @id @default(cuid())
+  professionalId String
+  professional ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  
+  // Portfolio work details
+  title String
+  description String?
+  beforeImageUrl String?
+  afterImageUrl String
+  
+  // Style tags for this work
+  styleTags String[]
+  colorTags String[]
+  techniqueTags String[]
+  category ServiceCategory
+  
+  // Work metadata
+  completionTime Int? // actual time taken in minutes
+  difficulty StyleDifficulty @default(MEDIUM)
+  clientSatisfaction Int? // 1-5 rating
+  
+  // Visibility
+  isPublic Boolean @default(true)
+  isFeatured Boolean @default(false)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("style_portfolio")
+}
+
+model StyleMatchHistory {
+  id String @id @default(cuid())
+  clientId String
+  professionalId String
+  styleAnalysisId String
+  
+  client User @relation("ClientStyleMatches", fields: [clientId], references: [id])
+  professional User @relation("ProfessionalStyleMatches", fields: [professionalId], references: [id])
+  styleAnalysis StyleAnalysis @relation(fields: [styleAnalysisId], references: [id])
+  
+  matchScore Float // 0-100
+  matchReasons String[] // ["color_expertise", "technique_match", "high_rating"]
+  
+  // Interaction tracking
+  viewed Boolean @default(false)
+  contacted Boolean @default(false)
+  booked Boolean @default(false)
+  
+  createdAt DateTime @default(now())
+  
+  @@map("style_match_history")
+}
+
+// Enums
+enum UserRole {
+  CLIENT
+  PROFESSIONAL
+  ADMIN
+}
+
+enum ServiceCategory {
+  HAIR_STYLING
+  MANICURE
+  PEDICURE
+  MAKEUP
+  SKINCARE
+  EYEBROWS
+  MASSAGE
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CASH
+}
+
+enum NotificationType {
+  BOOKING_REQUEST
+  BOOKING_CONFIRMED
+  BOOKING_CANCELLED
+  PAYMENT_RECEIVED
+  REVIEW_RECEIVED
+  VERIFICATION_APPROVED
+  VERIFICATION_REJECTED
+  GENERAL
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum StyleDifficulty {
+  EASY
+  MEDIUM
+  HARD
+  EXPERT
+}
+
+// Gamification Models
+model BeautyPoints {
+  id          String   @id @default(cuid())
+  userId      String
+  points      Int
+  action      String   // "booking", "review", "referral", "first_time", "profile_complete", "photo_upload"
+  description String
+  bookingId   String?  // Optional reference to booking
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("beauty_points")
+}
+
+model UserBadge {
+  id        String   @id @default(cuid())
+  userId    String
+  badgeType String   // "bronze", "silver", "gold", "platinum", "trendsetter", "loyal_client", "social_butterfly"
+  level     String   // "BRONZE", "SILVER", "GOLD", "PLATINUM"
+  earnedAt  DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("user_badges")
+}
+
+model Referral {
+  id           String   @id @default(cuid())
+  referrerId   String
+  referredId   String?
+  code         String   @unique
+  status       String   @default("pending") // "pending", "completed", "expired"
+  rewardClaimed Boolean @default(false)
+  rewardPoints Int      @default(100)
+  createdAt    DateTime @default(now())
+  completedAt  DateTime?
+  
+  referrer     User     @relation("UserReferrals", fields: [referrerId], references: [id], onDelete: Cascade)
+  referred     User?    @relation("UserReferred", fields: [referredId], references: [id], onDelete: SetNull)
+  
+  @@map("referrals")
+}
+
+model FlashDeal {
+  id          String   @id @default(cuid())
+  serviceId   String
+  discount    Int      // percentage (e.g., 30 for 30%)
+  startTime   DateTime
+  endTime     DateTime
+  isActive    Boolean  @default(true)
+  neighborhood String
+  maxUses     Int      @default(10)
+  currentUses Int      @default(0)
+  createdAt   DateTime @default(now())
+  
+  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  
+  @@map("flash_deals")
+}
+
+model BeautyTimeline {
+  id          String   @id @default(cuid())
+  userId      String
+  bookingId   String
+  beforePhoto String?
+  afterPhoto  String?
+  notes       String?
+  isPublic    Boolean  @default(false)
+  serviceType String? // "HAIR_STYLING", "MAKEUP", etc.
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  
+  @@map("beauty_timeline")
+}
+
+// Advanced Analytics Models
+model EarningsPrediction {
+  id String @id @default(cuid())
+  professionalId String
+  professional ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  
+  // Prediction period
+  predictionDate DateTime
+  predictionType PredictionType // WEEKLY, MONTHLY, QUARTERLY
+  
+  // Prediction results
+  predictedEarnings Float
+  confidenceScore Float // 0-100
+  lowerBound Float
+  upperBound Float
+  
+  // Factors influencing prediction
+  seasonalityFactor Float
+  trendFactor Float
+  demandFactor Float
+  
+  // AI analysis
+  aiInsights Json // Generated insights and recommendations
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("earnings_predictions")
+}
+
+model ScheduleOptimization {
+  id String @id @default(cuid())
+  professionalId String
+  professional ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  
+  // Analysis period
+  analysisDate DateTime
+  weeklyPattern Json // Optimized schedule for the week
+  
+  // Optimization results
+  currentRevenue Float
+  optimizedRevenue Float
+  potentialIncrease Float
+  
+  // Recommendations
+  timeSlotRecommendations Json // Array of time slot suggestions
+  priceOptimizations Json // Dynamic pricing suggestions
+  
+  // AI insights
+  aiSuggestions Json
+  
+  createdAt DateTime @default(now())
+  
+  @@map("schedule_optimizations")
+}
+
+model DemandAnalytics {
+  id String @id @default(cuid())
+  
+  // Geographic data
+  city String
+  state String
+  zipCode String?
+  
+  // Temporal data
+  date DateTime
+  hourSlot Int // 0-23
+  dayOfWeek Int // 0-6
+  month Int // 1-12
+  
+  // Demand metrics
+  serviceCategory ServiceCategory
+  demandScore Float // 0-100
+  bookingCount Int
+  averagePrice Float
+  
+  // Competitive analysis
+  professionalCount Int
+  marketSaturation Float
+  
+  createdAt DateTime @default(now())
+  
+  @@map("demand_analytics")
+}
+
+model ClientRetentionAnalysis {
+  id String @id @default(cuid())
+  professionalId String
+  professional ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  
+  // Analysis metrics
+  totalClients Int
+  returningClients Int
+  retentionRate Float
+  averageTimeBetweenVisits Float // in days
+  
+  // Client segmentation
+  newClients Int
+  regularClients Int
+  atRiskClients Int
+  lostClients Int
+  
+  // Lifetime value
+  averageLifetimeValue Float
+  topClientValue Float
+  
+  // AI recommendations
+  retentionStrategies Json
+  followUpSuggestions Json
+  
+  analysisDate DateTime
+  createdAt DateTime @default(now())
+  
+  @@map("client_retention_analysis")
+}
+
+model BusinessInsight {
+  id String @id @default(cuid())
+  professionalId String
+  professional ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  
+  // Insight details
+  type InsightType
+  priority InsightPriority
+  title String
+  description String
+  impact String // Expected impact description
+  
+  // Metrics
+  currentValue Float?
+  targetValue Float?
+  potentialRevenue Float?
+  implementationCost Float?
+  
+  // Status tracking
+  status InsightStatus @default(ACTIVE)
+  viewed Boolean @default(false)
+  implemented Boolean @default(false)
+  
+  // AI analysis
+  aiConfidence Float // 0-100
+  aiReasoning Json
+  
+  // Expiry
+  expiresAt DateTime?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("business_insights")
+}
+
+model CompetitiveAnalysis {
+  id String @id @default(cuid())
+  professionalId String
+  professional ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  
+  // Market position
+  marketRank Int
+  totalCompetitors Int
+  averageMarketPrice Float
+  pricePosition String // "BELOW", "AVERAGE", "ABOVE"
+  
+  // Performance metrics
+  bookingVelocity Float // bookings per week
+  competitorAvgVelocity Float
+  ratingPosition Float // percentile
+  
+  // Service gaps
+  missingServices String[]
+  opportunityServices String[]
+  
+  // Geographic analysis
+  serviceRadius Float // km
+  competitorDensity Float
+  marketOpportunity Float
+  
+  // AI insights
+  competitiveAdvantages String[]
+  weaknesses String[]
+  recommendations Json
+  
+  analysisDate DateTime
+  createdAt DateTime @default(now())
+  
+  @@map("competitive_analysis")
+}
+
+// Add relationships to ProfessionalProfile
+model AnalyticsCache {
+  id String @id @default(cuid())
+  professionalId String
+  
+  // Cache metadata
+  cacheKey String
+  cacheType CacheType
+  
+  // Cached data
+  data Json
+  
+  // Expiry
+  expiresAt DateTime
+  
+  createdAt DateTime @default(now())
+  
+  @@unique([professionalId, cacheKey])
+  @@map("analytics_cache")
+}
+
+// Beauty Academy Models
+model InstructorProfile {
+  id String @id @default(cuid())
+  userId String @unique
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Instructor details
+  bio String
+  specializations String[] // ["Hair", "Makeup", "Nails", "Business"]
+  yearsExperience Int
+  certifications String[]
+  portfolioImages String[]
+  
+  // Social media
+  instagram String?
+  youtube String?
+  website String?
+  
+  // Stats
+  totalCourses Int @default(0)
+  totalStudents Int @default(0)
+  averageRating Float @default(0)
+  totalEarnings Float @default(0)
+  
+  // Settings
+  isActive Boolean @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("instructor_profiles")
+}
+
+model Course {
+  id String @id @default(cuid())
+  instructorId String
+  instructor User @relation("InstructorCourses", fields: [instructorId], references: [id], onDelete: Cascade)
+  
+  // Course details
+  title String
+  description String
+  category CourseCategory
+  level CourseLevel
+  price Float
+  originalPrice Float? // For discounts
+  duration Int // Total minutes
+  
+  // Content
+  thumbnailUrl String
+  previewVideoUrl String? // Free preview
+  syllabus String // Course outline
+  
+  // Metadata
+  tags String[]
+  badges String[] // ["Bestseller", "New", "Premium", "Trending"]
+  requirements String[] // Prerequisites
+  skillsYouWillLearn String[]
+  
+  // Stats
+  totalStudents Int @default(0)
+  averageRating Float @default(0)
+  totalReviews Int @default(0)
+  totalRevenue Float @default(0)
+  
+  // Settings
+  isActive Boolean @default(true)
+  isFeatured Boolean @default(false)
+  allowReviews Boolean @default(true)
+  
+  // Dates
+  publishedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  modules CourseModule[]
+  enrollments CourseEnrollment[]
+  reviews CourseReview[]
+  
+  @@map("courses")
+}
+
+model CourseModule {
+  id String @id @default(cuid())
+  courseId String
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  
+  // Module details
+  title String
+  description String
+  order Int
+  duration Int // Minutes
+  
+  // Settings
+  isActive Boolean @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  lessons Lesson[]
+  
+  @@map("course_modules")
+}
+
+model Lesson {
+  id String @id @default(cuid())
+  moduleId String
+  module CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  
+  // Lesson details
+  title String
+  description String?
+  order Int
+  duration Int // Minutes
+  
+  // Content
+  videoUrl String?
+  videoThumbnail String?
+  pdfUrl String?
+  downloadableResources String[] // URLs to resources
+  
+  // Settings
+  isFree Boolean @default(false) // Free preview lesson
+  isActive Boolean @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  quizzes Quiz[]
+  progress CourseProgress[]
+  
+  @@map("lessons")
+}
+
+model CourseEnrollment {
+  id String @id @default(cuid())
+  userId String
+  courseId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  
+  // Enrollment details
+  enrollmentType EnrollmentType @default(INDIVIDUAL)
+  amount Float
+  paymentStatus PaymentStatus @default(PENDING)
+  
+  // Progress tracking
+  progressPercentage Float @default(0)
+  completedLessons Int @default(0)
+  totalLessons Int @default(0)
+  
+  // Completion
+  isCompleted Boolean @default(false)
+  completedAt DateTime?
+  certificateUrl String?
+  
+  // Access control
+  hasLifetimeAccess Boolean @default(true)
+  accessExpiresAt DateTime?
+  
+  enrolledAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@unique([userId, courseId])
+  @@map("course_enrollments")
+}
+
+model CourseProgress {
+  id String @id @default(cuid())
+  userId String
+  lessonId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  
+  // Progress details
+  isCompleted Boolean @default(false)
+  watchTime Int @default(0) // Seconds watched
+  totalTime Int @default(0) // Total lesson duration
+  progressPercentage Float @default(0)
+  
+  // Timestamps
+  startedAt DateTime @default(now())
+  completedAt DateTime?
+  lastWatchedAt DateTime @default(now())
+  
+  @@unique([userId, lessonId])
+  @@map("course_progress")
+}
+
+model Quiz {
+  id String @id @default(cuid())
+  lessonId String
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  
+  // Quiz details
+  title String
+  description String?
+  questions Json // Array of question objects
+  passingScore Int @default(70) // Percentage
+  maxAttempts Int @default(3)
+  timeLimit Int? // Minutes
+  
+  // Settings
+  isActive Boolean @default(true)
+  showResults Boolean @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  results QuizResult[]
+  
+  @@map("quizzes")
+}
+
+model QuizResult {
+  id String @id @default(cuid())
+  userId String
+  quizId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  
+  // Result details
+  score Int // Percentage
+  answers Json // User answers
+  isPassed Boolean @default(false)
+  attemptNumber Int @default(1)
+  
+  // Timestamps
+  startedAt DateTime @default(now())
+  completedAt DateTime?
+  
+  @@map("quiz_results")
+}
+
+model AcademyCertification {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Certification details
+  level CertificationLevel
+  category CourseCategory
+  
+  // Requirements met
+  coursesCompleted Int
+  averageScore Float
+  totalHours Int
+  
+  // Certificate
+  certificateUrl String
+  certificateNumber String @unique
+  
+  // Verification
+  isVerified Boolean @default(true)
+  verificationCode String @unique
+  
+  // Expiry (if applicable)
+  expiresAt DateTime?
+  
+  earnedAt DateTime @default(now())
+  
+  @@map("academy_certifications")
+}
+
+model CourseReview {
+  id String @id @default(cuid())
+  userId String
+  courseId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  
+  // Review details
+  rating Int // 1-5 stars
+  title String?
+  comment String?
+  
+  // Verification
+  isVerified Boolean @default(false) // Verified purchase
+  
+  // Helpful votes
+  helpfulVotes Int @default(0)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@unique([userId, courseId])
+  @@map("course_reviews")
+}
+
+// New Enums
+enum PredictionType {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+}
+
+enum InsightType {
+  PRICING_OPTIMIZATION
+  SCHEDULE_OPTIMIZATION
+  SERVICE_RECOMMENDATION
+  MARKETING_SUGGESTION
+  RETENTION_STRATEGY
+  COMPETITIVE_ADVANTAGE
+}
+
+enum InsightPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum InsightStatus {
+  ACTIVE
+  DISMISSED
+  IMPLEMENTED
+  EXPIRED
+}
+
+enum CacheType {
+  EARNINGS_PREDICTION
+  SCHEDULE_OPTIMIZATION
+  DEMAND_HEATMAP
+  RETENTION_ANALYSIS
+  COMPETITIVE_ANALYSIS
+}
+
+// Beauty Academy Enums
+enum CourseCategory {
+  HAIR_STYLING
+  MAKEUP
+  NAILS
+  BUSINESS_SKILLS
+  SKINCARE
+  EYEBROWS
+  ADVANCED_TECHNIQUES
+}
+
+enum CourseLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+  MASTERCLASS
+}
+
+enum CertificationLevel {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+  DIAMOND
+}
+
+enum EnrollmentType {
+  INDIVIDUAL
+  BUNDLE
+  ANNUAL_PASS
+  PREMIUM_QA
+}
+
+// Salon System Models
+model Salon {
+  id              String   @id @default(cuid())
+  name            String
+  description     String?
+  address         String
+  city            String
+  state           String
+  zipCode         String
+  phone           String
+  email           String
+  website         String?
+  businessLicense String?
+  
+  // Verification
+  isVerified      Boolean  @default(false)
+  verifiedAt      DateTime?
+  
+  // Commission settings
+  platformFeeRate Float    @default(0.10) // 10%
+  salonCommissionRate Float @default(0.20) // 20%
+  
+  // Settings
+  settings        Json?
+  
+  // Relations
+  ownerId         String
+  owner           User     @relation("SalonOwner", fields: [ownerId], references: [id])
+  
+  professionals   SalonProfessional[]
+  analytics       SalonAnalytics[]
+  webhooks        SalonWebhook[]
+  scheduleTemplates SalonScheduleTemplate[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("salons")
+}
+
+model SalonProfessional {
+  id           String   @id @default(cuid())
+  salonId      String
+  userId       String
+  professionalId String
+  role         SalonRole @default(PROFESSIONAL)
+  commissionRate Float   @default(0.70) // 70% to professional
+  isActive     Boolean  @default(true)
+  joinedAt     DateTime @default(now())
+  
+  // Relations
+  salon        Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  professional ProfessionalProfile @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  
+  @@unique([salonId, professionalId])
+  @@map("salon_professionals")
+}
+
+model SalonAnalytics {
+  id              String   @id @default(cuid())
+  salonId         String
+  date            DateTime @db.Date
+  totalRevenue    Float    @default(0)
+  totalBookings   Int      @default(0)
+  averageRating   Float    @default(0)
+  clientCount     Int      @default(0)
+  professionalCount Int    @default(0)
+  
+  // Detailed metrics
+  completedBookings Int    @default(0)
+  cancelledBookings Int    @default(0)
+  newClients        Int    @default(0)
+  returningClients  Int    @default(0)
+  
+  // Relations
+  salon           Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  
+  @@unique([salonId, date])
+  @@map("salon_analytics")
+}
+
+model SalonWebhook {
+  id          String   @id @default(cuid())
+  salonId     String
+  url         String
+  events      String[] // ["booking.created", "booking.cancelled", "payment.completed"]
+  isActive    Boolean  @default(true)
+  secret      String   @unique
+  
+  // Metadata
+  description String?
+  lastTriggered DateTime?
+  failureCount  Int      @default(0)
+  
+  // Relations
+  salon       Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("salon_webhooks")
+}
+
+model SalonScheduleTemplate {
+  id          String   @id @default(cuid())
+  salonId     String
+  name        String
+  description String?
+  schedule    Json     // Weekly schedule template
+  isDefault   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  
+  // Relations
+  salon       Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("salon_schedule_templates")
+}
+
+// Salon Enum
+enum SalonRole {
+  OWNER
+  MANAGER
+  PROFESSIONAL
+  TRAINEE
+}
+
+// Admin Management Models
+model AdminMessage {
+  id        String   @id @default(cuid())
+  fromId    String
+  subject   String
+  message   String
+  type      String   // "support", "verification", "report", "contact"
+  status    String   @default("unread") // "unread", "read", "responded", "resolved"
+  priority  String   @default("normal") // "low", "normal", "high", "urgent"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  from      User     @relation("UserMessages", fields: [fromId], references: [id])
+  
+  @@map("admin_messages")
+}
+
+model UserBan {
+  id        String   @id @default(cuid())
+  userId    String
+  reason    String
+  bannedBy  String
+  bannedAt  DateTime @default(now())
+  expiresAt DateTime?
+  isActive  Boolean  @default(true)
+  
+  user      User     @relation("UserBans", fields: [userId], references: [id])
+  admin     User     @relation("AdminBans", fields: [bannedBy], references: [id])
+  
+  @@map("user_bans")
+}
+
+model ContentManagement {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  type      String   // "text", "image", "config", "json"
+  value     String   // Can store JSON for complex content
+  category  String   // "app", "legal", "marketing", "help"
+  updatedBy String
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  
+  admin     User     @relation("AdminContent", fields: [updatedBy], references: [id])
+  
+  @@map("content_management")
+}
+
+model AdminLog {
+  id        String   @id @default(cuid())
+  adminId   String
+  action    String   // "user_ban", "user_unban", "content_update", "course_create", etc.
+  entityType String   // "user", "course", "content", "booking", etc.
+  entityId   String?
+  details    Json?    // Additional details about the action
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  
+  admin     User     @relation("AdminActions", fields: [adminId], references: [id])
+  
+  @@map("admin_logs")
+}
+
+model RewardConfiguration {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  pointsRequired Int
+  rewardType  String   // "discount", "service", "product", "cash"
+  rewardValue String   // JSON string with reward details
+  isActive    Boolean  @default(true)
+  maxRedeems  Int?     // Maximum number of times this can be redeemed
+  currentRedeems Int   @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  userRewards UserReward[]
+  
+  @@map("reward_configurations")
+}
+
+model UserReward {
+  id           String   @id @default(cuid())
+  userId       String
+  rewardId     String
+  status       String   @default("available") // "available", "redeemed", "expired"
+  redeemedAt   DateTime?
+  expiresAt    DateTime?
+  createdAt    DateTime @default(now())
+  
+  user         User     @relation("UserRewards", fields: [userId], references: [id])
+  reward       RewardConfiguration @relation(fields: [rewardId], references: [id])
+  
+  @@map("user_rewards")
+}
+
+// Live Service Tracking Models
+model ServiceTracking {
+  id              String   @id @default(cuid())
+  bookingId       String   @unique
+  professionalId  String
+  clientId        String
+  status          TrackingStatus @default(CONFIRMED)
+  
+  // Location data
+  professionalLat Float?
+  professionalLng Float?
+  clientLat       Float?
+  clientLng       Float?
+  
+  // Timing
+  estimatedArrival DateTime?
+  actualArrival   DateTime?
+  serviceStarted  DateTime?
+  serviceCompleted DateTime?
+  
+  // Equipment checklist
+  equipmentChecklist Json?
+  
+  // Emergency contacts
+  emergencyContacts Json?
+  locationShared    Boolean @default(false)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  booking         Booking @relation(fields: [bookingId], references: [id])
+  professional    User    @relation("ProfessionalTracking", fields: [professionalId], references: [id])
+  client          User    @relation("ClientTracking", fields: [clientId], references: [id])
+  
+  @@map("service_tracking")
+}
+
+model DynamicPricing {
+  id              String   @id @default(cuid())
+  serviceId       String
+  basePrice       Float
+  currentPrice    Float
+  surgeMultiplier Float    @default(1.0)
+  demandLevel     String   // "low", "medium", "high", "surge"
+  
+  // Pricing factors
+  timeSlot        String
+  dayOfWeek       Int
+  seasonalFactor  Float    @default(1.0)
+  locationFactor  Float    @default(1.0)
+  
+  // Savings calculation
+  peakPrice       Float?
+  savingsAmount   Float?
+  
+  validFrom       DateTime
+  validUntil      DateTime
+  
+  createdAt       DateTime @default(now())
+  
+  service         Service  @relation(fields: [serviceId], references: [id])
+  
+  @@map("dynamic_pricing")
+}
+
+model ProfessionalSurgeSettings {
+  id              String   @id @default(cuid())
+  professionalId  String   @unique
+  surgeEnabled    Boolean  @default(true)
+  minSurgeRate    Float    @default(1.1)  // 10% minimum
+  maxSurgeRate    Float    @default(1.5)  // 50% maximum
+  autoAccept      Boolean  @default(false)
+  
+  professional    User     @relation("ProfessionalSurgeSettings", fields: [professionalId], references: [id])
+  
+  @@map("professional_surge_settings")
+}
+
+model RecurringBookingPrice {
+  id              String   @id @default(cuid())
+  clientId        String
+  serviceId       String
+  lockedPrice     Float
+  frequency       String   // "weekly", "biweekly", "monthly"
+  lockedUntil     DateTime
+  bookingsUsed    Int      @default(0)
+  maxBookings     Int      @default(4)
+  
+  client          User     @relation("ClientRecurringBookings", fields: [clientId], references: [id])
+  service         Service  @relation(fields: [serviceId], references: [id])
+  
+  @@map("recurring_booking_prices")
+}
+
+model EmergencyContact {
+  id              String   @id @default(cuid())
+  userId          String
+  name            String
+  phone           String
+  relationship    String   // "family", "friend", "partner", "other"
+  isPrimary       Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  
+  user            User     @relation("UserEmergencyContacts", fields: [userId], references: [id])
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("emergency_contacts")
+}
+
+enum TrackingStatus {
+  CONFIRMED
+  ON_THE_WAY
+  ARRIVED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}

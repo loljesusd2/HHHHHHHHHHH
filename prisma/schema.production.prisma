@@ -1,0 +1,28 @@
+
+// Production optimized Prisma schema for cloud deployment
+// This file shows production-ready configurations
+
+generator client {
+    provider = "prisma-client-js"
+    // Optimized for serverless deployment
+    binaryTargets = ["native", "rhel-openssl-1.0.x", "linux-musl"]
+    // Output to standard location for cloud deployment
+    output = "../node_modules/.prisma/client"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+    // Enable connection pooling for better performance
+    directUrl = env("DIRECT_URL")
+}
+
+// Note: The rest of the schema remains the same as schema.prisma
+// This file is for reference and production optimization guidelines
+
+// Production Tips:
+// 1. Use connection pooling (PgBouncer or built-in)
+// 2. Set appropriate connection limits
+// 3. Use read replicas for heavy read operations
+// 4. Configure backup strategies
+// 5. Monitor query performance
